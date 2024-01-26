@@ -1,12 +1,31 @@
-// require("dotenv").config({ path: "./env" });
 import dotenv from "dotenv";
 import connectDB from "./db/index.js";
+import express from "express";
+
+const app = express();
 
 dotenv.config({
   path: "./env",
 });
 
-connectDB();
+app.on("error", (err) => {
+  console.log(`MongoDB Connection Failed at ./index.js :) ${err}`);
+});
+
+connectDB()
+  .then(() => {
+    app.get("/", (res, rep)=>{
+      rep.send("hello  ");
+    })
+    app.listen(process.env.PORT || 4000, () => {
+      console.log(
+        `\nApplication is Running on : http://localhost:${process.env.PORT || 4000} :)`
+      );
+    });
+  })
+  .catch((err) => {
+    console.log(`MongoDB Connection Failed at ./index.js :) ${err}\n`);
+  });
 
 /*
   import express from "express";
