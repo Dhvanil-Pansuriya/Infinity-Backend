@@ -15,9 +15,6 @@ app.on("error", (err) => {
 
 connectDB()
   .then(() => {
-    app.get("/", (res, rep)=>{
-      rep.send("hello  ");
-    })
     app.listen(process.env.PORT || 4000, () => {
       console.log(
         `\nApplication is Running on : http://localhost:${process.env.PORT || 4000} :)\n`

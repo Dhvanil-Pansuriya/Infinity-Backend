@@ -3,7 +3,24 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { upload } from "../middlewares/multer.middlewares.js";
+import fs from "fs";
+import mongoose from "mongoose";
+
+const generateAccessAndRefreshToken = async (userId) => {
+  try {
+    const user = await User.findOne(userId);
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false });
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Something went wrong while Generating Refresh & Access Token"
+    );
+  }
+};
 
 const registerUser = asyncHandler(async (req, res) => {
   /*
@@ -22,22 +39,8 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "All fields are Required..!!");
   }
 
-  // Check if Username or Email is exists or not
-  const existedUser = await User.findOne({
-    $or: [{ username }, { email }],
-  });
-
-  if (existedUser) {
-    throw new ApiError(
-      409,
-      "User with Email or Username is already Exists..!!"
-    );
-  }
-
   // Check for Image  & Check for Avatar
   const avatarLocalPath = req.files?.avatar[0]?.path;
-  // const coverImageLocalPath = req.files?.coverImage[0]?.path;
-
   let coverImageLocalPath;
   if (
     req.files &&
@@ -49,6 +52,21 @@ const registerUser = asyncHandler(async (req, res) => {
 
   if (!avatarLocalPath) {
     throw new ApiError(400, "Avatar file is Required..!!");
+  }
+
+  // Check if Username or Email is exists or not
+  const existedUser = await User.findOne({
+    $or: [{ username }, { email }],
+  });
+
+  if (existedUser) {
+    // Delete (Avatar & coverImage) file if user Exists
+    fs.unlinkSync(avatarLocalPath);
+    fs.unlinkSync(coverImageLocalPath);
+    throw new ApiError(
+      409,
+      "User with Email or Username is already Exists..!!"
+    );
   }
 
   // Upload on Cloudinary
@@ -80,17 +98,85 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Something went wrong while Registering the User");
   }
 
-  // console.log(username);
-  // console.log(fullName);
-  // console.log(coverImage);
-  // console.table(avatar);
-  // console.log(password);
-  // console.log(email);
-
   // Return Success Flag
   return res
     .status(201)
     .json(new ApiResponse(200, createdUser, "User Registered Successfully.."));
 });
 
-export { registerUser };
+const loginUser = asyncHandler(async (req, res) => {
+  const { username, email, password } = req.body;
+
+  if (!username || !email) {
+    throw new ApiError(400, "Username or Email is Required");
+  }
+
+  const user = await User.findOne({
+    $or: [{ username }, { email }],
+  });
+
+  if (!user) {
+    throw new ApiError(400, "User dose not exists");
+  }
+
+  const isPasswordValid = await user.isPasswordCorrect(password);
+
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid Password Credential");
+  }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
+    user._id
+  );
+
+  const loggedInUser = await User.findOne(user._id).select(
+    "-password -refreshToken"
+  );
+
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  return res
+    .send(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          user: loggedInUser,
+          accessToken,
+          refreshToken,
+        },
+        "User Logged in Successfully"
+      )
+    );
+});
+
+const logoutUser = asyncHandler(async (req, res) => {
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: {
+        refreshToken: undefined,
+      },
+    },
+    {
+      new: true,
+    }
+  );
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(200, {}, "User Logout SuccessFully");
+});
+
+export { registerUser, loginUser, logoutUser };
