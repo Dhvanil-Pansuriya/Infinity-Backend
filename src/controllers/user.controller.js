@@ -107,16 +107,19 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
   const { username, email, password } = req.body;
 
-  if (!username || !email) {
-    throw new ApiError(400, "Username or Email is Required");
+  if (!username && !email) {
+    throw new ApiError(400, "Username and Email is Required");
   }
 
   const user = await User.findOne({
-    $or: [{ username }, { email }],
+    $and: [{ username }, { email }],
   });
 
   if (!user) {
-    throw new ApiError(400, "User dose not exists");
+    throw new ApiError(
+      400,
+      "User dose not exists ( Username, Email & Password dose not match )"
+    );
   }
 
   const isPasswordValid = await user.isPasswordCorrect(password);
@@ -139,7 +142,7 @@ const loginUser = asyncHandler(async (req, res) => {
   };
 
   return res
-    .send(200)
+    .status(200)
     .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)
     .json(
@@ -176,7 +179,9 @@ const logoutUser = asyncHandler(async (req, res) => {
     .status(200)
     .clearCookie("accessToken", options)
     .clearCookie("refreshToken", options)
-    .json(200, {}, "User Logout SuccessFully");
+    .json(new ApiResponse(200, {}, "User Logout SuccessFully"));
 });
+
+
 
 export { registerUser, loginUser, logoutUser };
