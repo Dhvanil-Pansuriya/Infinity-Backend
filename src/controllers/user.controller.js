@@ -185,11 +185,11 @@ const logoutUser = asyncHandler(async (req, res) => {
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const incomingRefreshToken =
-    req.cookie.refreshToken || req.body.refreshAccessToken;
+    req.cookies.refreshToken || req.body.refreshToken;
   if (!incomingRefreshToken) {
     throw new ApiError(
       401,
-      "Unauthorize request - RefreshToken not found.....!!"
+      "Unauthorize request - RefreshToken not found. ( or user may be not logged ).......!! "
     );
   }
   try {
